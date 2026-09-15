@@ -1,7 +1,7 @@
 # What We Measure About People — And What We Won't
 
 **Product:** OpsLink
-**Version:** 2.0 — 2026-09-09
+**Version:** 3.0 — 2026-09-14
 **Who should read this:** the CEO, and GB's employment lawyer
 **Status:** ⚠️ **Needs the CEO's written yes or no before 2026-09-25**
 
@@ -17,13 +17,26 @@ This is a short document about a genuinely important decision, so it's written f
 
 ## 1. What the CEO asked for
 
-Three things came up, and they're all completely reasonable frustrations for someone running four warehouses:
+Four things came up, and the frustrations behind them are all completely reasonable for someone running four warehouses:
 
 1. **Employees taking 30+ minute bathroom breaks.**
-2. **People chatting instead of working while on the clock.**
+2. **People chatting instead of working while on the clock**, and clocking out only after chatting for a while.
 3. **"AI to keep employees on track."**
+4. **Computer vision in the warehouse that alerts management when workers are slacking off.** *(Added in the September 2026 brief.)*
 
 Nobody reading this thinks those frustrations are unfair. If you're paying for eight hours and getting six, that's a real problem and it costs real money.
+
+### On the fourth one specifically
+
+The brief puts the reasoning plainly, so we will too. It says: we're aware of the 24/7 surveillance objection, but we're not responsible for that, so we can build it anyway and let the company decide whether to switch it on.
+
+**We don't think that holds, and we want to be direct about why rather than quietly leaving the feature out.**
+
+The "we only built it" line has been tested and it does not survive contact with California employment law. When a monitoring system produces the evidence in a wrongful-termination or disability claim, the party that designed it gets named alongside the party that ran it, and gets to explain its design choices under oath. "The customer chose to enable it" is a sentence lawyers have heard before.
+
+There is also a plainer problem. Continuous video analysis of who is and isn't working is the single fastest way to turn a workforce against a piece of software. The crew does not distinguish between the tab that shows their tasks and the camera that watches them — it's one app, and it's the app management installed to watch them. Everything in [§6](#6-what-this-means-for-how-the-app-gets-introduced) about introducing this successfully stops working the day that feature exists.
+
+**Status: requested, declined, on the record.** Not forgotten, not overlooked, and re-openable only on written advice from GB's employment counsel — not on our say-so or the CEO's.
 
 ## 2. What we're going to do about it
 
@@ -70,7 +83,7 @@ We're not lawyers. But these four points are well-established enough that we'd b
 
 **Recording or scanning conversations needs everyone's consent in California.** California requires all parties to consent to the recording of a confidential communication. Automatically scanning employees' in-app messages for productivity signals sits in genuinely hazardous territory.
 
-**New rules on automated decision-making are arriving right around Release 6.** California's privacy regulations now impose notice, opt-out, and risk-assessment obligations on automated technology used to make employment decisions. If we build an engine that scores individual employees, GB inherits a compliance project — notices, opt-outs, formal risk assessments — right when the AI features would launch. Building output metrics instead avoids creating that obligation in the first place.
+**New rules on automated decision-making are arriving right around Phase 6.** California's privacy regulations now impose notice, opt-out, and risk-assessment obligations on automated technology used to make employment decisions. If we build an engine that scores individual employees, GB inherits a compliance project — notices, opt-outs, formal risk assessments — right when the AI features would launch. Building output metrics instead avoids creating that obligation in the first place.
 
 **The practical summary:** presence-tracking would take four risks GB doesn't currently carry and attach them to a system GB paid for and can be subpoenaed about. Output-tracking carries none of them and answers the question better.
 
@@ -86,14 +99,15 @@ We're not lawyers. But these four points are well-established enough that we'd b
 | Pick accuracy and order cycle time | Reading or scanning message content |
 | Clock in/out against **the property line only** | Following someone's movement around the warehouse |
 | AI that drafts task lists and flags **operational** problems — *"Warehouse 2's pick accuracy dropped 12% this week"* | AI that scores, ranks, or rates individual employees |
+| — | **Computer vision that watches workers and flags idleness** |
 
-**About the clock-in geofence.** In Release 2, clocking in checks that you're at the warehouse — a circle around the property. It does not track where you go once you're inside, and it isn't running while you're on shift. It answers "are you at work?" and nothing else.
+**About the clock-in geofence.** In Phase 6, clocking in checks that you're at the warehouse — a circle around the property. It does not track where you go once you're inside, and it isn't running while you're on shift. It answers "are you at work?" and nothing else.
 
 ---
 
 ## 5. Five rules every metric has to follow
 
-These are commitments, not aspirations. They're checked in code review, and there's a specific audit against them in Sprint 4b.
+These are commitments, not aspirations. They're checked in code review, and there's a specific audit against them during the hardening window, before the trial starts.
 
 **Rule 1 — Numbers about individuals are advisory only.**
 The system never generates discipline, warnings, rankings, or a "bottom performer" list. It shows a human being some numbers, and the human being decides what to do. There is no automated employment action anywhere in this product.
@@ -136,7 +150,7 @@ You only get one first impression with a warehouse crew. This is what makes that
 | # | What | By when |
 |---|---|---|
 | 1 | **The CEO accepts or rejects this policy in writing** | **2026-09-25** |
-| 2 | GB's employment lawyer reviews this document | **2027-01-15**, before clock-in ships in Release 2 |
+| 2 | GB's employment lawyer reviews this document | **2027-01-15**, before clock-in ships in Phase 6 |
 | 3 | GB confirms the wording of the privacy notice | **2027-01-15** |
 
 **On item 1:** we need a clear yes or no, not silence.

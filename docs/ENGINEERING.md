@@ -1,7 +1,7 @@
 # How It's Built
 
 **Product:** OpsLink — iOS operations app
-**Version:** 2.0 — 2026-09-09
+**Version:** 3.0 — 2026-09-14
 **Author:** Andy Kuang
 **Companion to:** [PRODUCT.md](PRODUCT.md)
 
@@ -24,7 +24,7 @@ Every choice below optimizes for *hours saved*, not for elegance, and not for sc
 | **Don't depend on GB's ERP early** | It's an unknown of unknown difficulty | Dynamics work is isolated, late, and swappable |
 | **Buy login, don't build it** | Doing auth correctly is 4+ weeks | Supabase Auth |
 
-**Explicitly not goals for Release 1:** horizontal scale, microservices, multi-region, self-hosting, 99.99% uptime. GB has ~150 people in four buildings.
+**Explicitly not goals for the MVP (Phases 1–2):** horizontal scale, microservices, multi-region, self-hosting, 99.99% uptime. GB has ~150 people in four buildings.
 
 ---
 
@@ -69,14 +69,16 @@ Every choice below optimizes for *hours saved*, not for elegance, and not for sc
 
 ### 2.2 One app, two layouts
 
-There is a single app in the App Store. When you log in, it reads your role and builds itself accordingly.
+There is a single app in the App Store. When you log in, it reads your **role** (what you're allowed to touch) and your **job tags** (what's useful to you) and builds itself accordingly.
 
-| | iPhone | iPad |
+| Role + tag | iPhone | iPad |
 |---|---|---|
-| **Warehouse employee** | My Day, Profile | Same, wider |
-| **Driver** | Pre-trip check, deliveries, Profile | Same, wider |
-| **Manager** | Today's board, quick reassign | **Full task builder, dashboards, admin** |
-| **CEO** | Summary numbers | **All warehouses, trends, reporting** |
+| **Employee** | My Day, Profile | Same, wider |
+| **Employee** · `driver` | Pre-trip check, deliveries, Profile | Same, wider |
+| **Employee** · `receiver` | Receiving checks *(Phase 3+, pending the process walkthrough)* | Same, wider |
+| **Management** · site scope | Today's board, quick reassign | **Full task builder, dashboards, admin** |
+| **Management** · org scope *(the CEO)* | Summary numbers | **All warehouses, trends, reporting** |
+| **Customer** | Catalog, cart, order history *(Phase 5)* | Same, wider |
 
 SwiftUI handles this natively — the same views adapt through size classes and `NavigationSplitView`, which gives a sidebar-plus-detail layout on iPad and a stack of screens on iPhone. We write the screen once.
 
@@ -91,7 +93,7 @@ SwiftUI handles this natively — the same views adapt through size classes and 
 | **Local storage** | GRDB (SQLite) | The offline mirror and outbox need predictable, inspectable SQL. SwiftData is newer and less proven for a sync queue |
 | **Backend** | Supabase — Postgres, Auth, Storage, Edge Functions | One managed service covers the database, logins, file storage, and scheduled jobs |
 | **API** | **None.** `supabase-swift` talks to Postgres directly | Row-Level Security does the enforcing. A middle tier would be code we write, test, and host for no added safety |
-| **Server-side jobs** | Supabase Edge Functions (TypeScript) on a schedule | Only two jobs exist in R1: materialize recurring tasks nightly, expire overdue ones |
+| **Server-side jobs** | Supabase Edge Functions (TypeScript) on a schedule | Only two jobs exist in the MVP: materialize recurring tasks nightly, expire overdue ones |
 | **Migrations** | Plain `.sql` files, Supabase CLI | Version-controlled, reviewable, no ORM fighting the RLS policies |
 | **Testing (app)** | Swift Testing + XCUITest | Apple's own tooling, runs in Xcode and CI |
 | **Testing (database)** | Vitest against a local Supabase | Runs on a cheap Linux CI runner instead of a slow macOS one — matters when it runs on every single change |
@@ -105,7 +107,7 @@ SwiftUI handles this natively — the same views adapt through size classes and 
 
 ## 3. The data
 
-### 3.1 What we store in Release 1
+### 3.1 What we store in the MVP (Phases 1–2)
 
 ```sql
 organizations       -- one row per company. GB is row #1.
@@ -116,9 +118,12 @@ sites               -- GB's four warehouses
   geofence_center, geofence_radius_m
 
 profiles            -- a person, attached to a Supabase login
-  id (= auth.users.id), organization_id, site_id, role,
+  id (= auth.users.id), organization_id, site_id, role, scope, job_tags,
   full_name, phone, preferred_locale, is_active, created_at
-  -- role is one of: ceo, manager, sales, warehouse, driver, customer
+  -- role     is one of: management | employee | customer
+  -- scope    is one of: site | organization      (the CEO is organization-scoped)
+  -- job_tags is a set:  picker | stager | qc | driver | receiver | buyer | sales | office
+  -- site_id is the home warehouse; ignored when scope = organization
 
 task_templates      -- a reusable checklist, e.g. "morning cold-storage round"
   id, organization_id, site_id, name, description,
@@ -145,19 +150,23 @@ audit_log           -- who changed what, when. Never edited, never deleted.
   entity_id, before_json, after_json, occurred_at
 ```
 
-### 3.2 Three choices worth explaining
+### 3.2 Four choices worth explaining
 
 **Every table carries `organization_id` directly.** Not looked up through a chain of joins — physically on every row. This makes the security rule in [§4](#4-security) one simple, uniform, auditable line instead of a different puzzle per table.
 
 **Completions are separate from tasks, and can never be changed.** A completion is *evidence*. Evidence you can edit isn't evidence. When this system eventually gets quoted in an employment dispute — and it will — the record needs to be immutable. `tasks.status` is a convenience field; `task_completions` is the truth.
 
+**Permission is a role; job is a tag.** `role` decides what the database will let you touch — three values, small enough to test exhaustively. `job_tags` decides which screens are worth showing you. A driver and a picker need identical permissions and different screens, so they differ by tag, not by role. Keeping these separate is what stops the permission matrix growing a new row every time GB names a new job. A tag gets promoted to a real role only when a phase needs it to carry different permissions — most likely `driver`, at the pre-trip checklist.
+
+**The CEO is not a fourth role.** He is `management` with `scope = organization`, which is why he sees four warehouses where a manager sees one. A regional manager covering two sites is the same mechanism, and costs nothing to add.
+
 **We record two timestamps on every completion.** An employee in a Wi-Fi dead zone finishes a task at 08:14 and their phone syncs at 11:02. If we stored only the server's time, it would look like they did three hours of work in one minute, and an honest employee would look like they were gaming the system. We store both, and we **show both** in the app.
 
 ### 3.3 What comes later
 
-Release 3 adds `products`, `inventory_snapshots`, `customers` — filled read-only from Dynamics, each row stamped with where it came from and when. Release 4 adds `pick_tickets`, `pick_lines`, `pick_scans`. Release 5 adds `orders`, `order_lines`.
+Phase 3 adds `products`, `inventory_snapshots`, `customers` — filled read-only from Dynamics, each row stamped with where it came from and when. Phase 5 adds `orders`, `order_lines`. Pick tickets (`pick_tickets`, `pick_lines`, `pick_scans`) arrive only if digital pick dispatch is scheduled — it is currently out of scope.
 
-They're named here only so Release 1's design doesn't paint them into a corner. They aren't specified until their release.
+They're named here only so the MVP's design doesn't paint them into a corner. They aren't specified until their phase.
 
 ---
 
@@ -183,34 +192,34 @@ create policy tenant_isolation on tasks
   using (organization_id = (auth.jwt() ->> 'organization_id')::uuid);
 ```
 
-Role rules stack on top. A warehouse employee, for instance, sees only tasks assigned to them or open to their site:
+Role rules stack on top. An employee, for instance, sees only tasks assigned to them or open to their site, while management sees the whole site (or the whole company, if organization-scoped):
 
 ```sql
 create policy warehouse_reads_own on tasks for select
   using (
     organization_id = (auth.jwt() ->> 'organization_id')::uuid
     and (
-      (auth.jwt() ->> 'role') in ('ceo','manager')
+      (auth.jwt() ->> 'role') = 'management'
       or assigned_to_profile_id = auth.uid()
       or (assigned_to_profile_id is null and site_id = current_user_site())
     )
   );
 ```
 
-**The test we owe on this.** Success criterion 3 in [PRODUCT.md §4](PRODUCT.md#4-what-ships-when) is verified by an automated suite that runs on every single code change: it creates two fake companies, then asserts that for every table, under every role, looking across the boundary returns **zero rows**. It's written in Sprint 1, *before* any feature that depends on it. A failure blocks the change from merging, no exceptions.
+**The test we owe on this.** Success criterion 3 in [PRODUCT.md §4](PRODUCT.md#4-what-ships-when) is verified by an automated suite that runs on every single code change: it creates two fake companies, then asserts that for every table, under every role, looking across the boundary returns **zero rows**. It's written in Phase 2, *before* any feature that depends on it. A failure blocks the change from merging, no exceptions.
 
 ### 4.3 Sensitive data
 
 - **Passwords** never touch our code. Supabase Auth owns hashing and reset flows.
 - **Photos** live in a private bucket, handed out through short-lived signed links. Never a public URL.
-- **Personal data in R1** is limited to a name and phone number. No SSN, no home address, no payment data anywhere until Release 5 — and card data then goes to a payment processor, never into our database.
+- **Personal data in the MVP** is limited to a name and phone number. No SSN, no home address, no payment data anywhere until Phase 5 — and card data then goes to a payment processor, never into our database.
 - **The audit log** cannot be updated or deleted, because the app's database role isn't granted permission to do either.
 
 ---
 
 ## 5. Working offline
 
-This is the hardest technical requirement in Release 1, and the one that most decides whether the crew keeps opening the app.
+This is the hardest technical requirement in the MVP, and the one that most decides whether the crew keeps opening the app.
 
 **The model.** The phone keeps a local SQLite copy of **today's** tasks — never the full history, so it stays small by design. Reads always come from local storage, which means the list opens instantly with no spinner. Writes go into a durable queue and replay when the connection comes back.
 
@@ -231,7 +240,7 @@ The one real conflict is a manager deleting a task that someone already complete
 
 ---
 
-## 6. Connecting to Dynamics (Release 3)
+## 6. Connecting to Dynamics (Phase 3)
 
 ### 6.1 What we know and don't know
 
@@ -241,9 +250,15 @@ GB's data lives in a Microsoft Dynamics installation that the CEO describes as "
 
 ### 6.2 Three rules
 
-**Rule 1 — Releases 1 and 2 need zero Dynamics data.** This is the single most important scheduling decision in the project. Connecting to Dynamics is the highest-variance work in the whole plan; it could take two weeks or four months and we genuinely cannot tell which yet. So nothing GB needs first is allowed to depend on it. If Dynamics access never happens at all, R1 and R2 still ship and still deliver what the CEO asked for.
+**Rule 1 — Phases 1 and 2 need zero Dynamics data.** This is the single most important scheduling decision in the project. Connecting to Dynamics is the highest-variance work in the whole plan; it could take two weeks or four months and we genuinely cannot tell which yet. So nothing GB needs first is allowed to depend on it. If Dynamics access never happens at all, the MVP still ships and still delivers what the CEO asked for.
 
-**Rule 2 — We only read. Never write.** Dynamics stays the official record for stock and money. We're a copy with an operations layer on top. Writing into a 20-year-old ERP that runs a working business is how you take a working business offline.
+**Rule 2 — We only read, for now.** Dynamics stays the official record for stock and money. We're a copy with an operations layer on top. Writing into a 20-year-old ERP that runs a working business is how you take a working business offline.
+
+> **The CEO has asked for write-back** — orders entered in the app, inserted into Dynamics. That is the correct long-term shape, and it is the direct fix for re-keying (P4 in [PRODUCT.md §2.1](PRODUCT.md#21-things-this-app-fixes)). It is **not** committed, and it is **not** part of Phase 3.
+>
+> **What would have to be true first.** A spike, scheduled only after the read path has run in production for a full quarter, answering: does this Dynamics version expose a supported write path at all, or would we be writing to SQL Server tables directly? Is there a sandbox copy to test against, or only production? Can a bad write be reversed without a database restore? Who at GB signs off on an automated process touching the financial record?
+>
+> Until every one of those has an answer, the direction of data is one-way. The failure mode we are avoiding is not an inconvenience — it is corrupting twenty years of inventory and receivables in a system nobody currently administers.
 
 **Rule 3 — The plain-file option is the main plan, not the backup.**
 
@@ -255,7 +270,7 @@ We define one small interface, and three ways to satisfy it, in order of how muc
 | **Direct read-only SQL** | We query a read-only copy of their database | Provide a read-only login and network access |
 | **Modern API** | Standard REST | Only if GB ever upgrades Dynamics |
 
-**We build the CSV option first, unconditionally.** It works against every version of Dynamics ever shipped. It needs no database credentials, no VPN, no consultant, and no security review of an inbound connection to their production system. It turns Release 3 from "unknown, possibly impossible" into "about two weeks." If direct access appears later, we swap it in behind the same interface and nothing above it changes.
+**We build the CSV option first, unconditionally.** It works against every version of Dynamics ever shipped. It needs no database credentials, no VPN, no consultant, and no security review of an inbound connection to their production system. It turns Phase 3 from "unknown, possibly impossible" into "about two weeks." If direct access appears later, we swap it in behind the same interface and nothing above it changes.
 
 ### 6.3 How the nightly import works
 
@@ -275,8 +290,8 @@ The rules: running the same file twice changes nothing. Rows update in place bas
 
 The CEO wants to eventually move off Dynamics. This setup builds the path without committing to it:
 
-1. **Release 3 — Shadow.** We read from Dynamics. Dynamics is still in charge of everything.
-2. **Releases 4–5 — Own the operations.** Tasks, picks and orders start in OpsLink. Dynamics still owns stock and money.
+1. **Phase 3 — Shadow.** We read from Dynamics. Dynamics is still in charge of everything.
+2. **Phases 4–5 — Own the operations.** Tasks and orders start in OpsLink. Dynamics still owns stock and money. Write-back, if the spike above clears it, belongs here.
 3. **Someday — Selective handover.** One area at a time, OpsLink becomes the official record, feeding Dynamics a reconciliation copy until it can be switched off.
 
 We're not scheduling step 3. We're just making sure we haven't made it impossible.
@@ -296,7 +311,7 @@ We're not scheduling step 3. We're just making sure we haven't made it impossibl
 **What:** build in Apple's own language and framework.
 **Why:** the previous plan used React Native specifically so one codebase could serve a website *and* a phone app. With the website gone, that reason is gone with it. Native gives us better camera, offline storage, and performance, and a much simpler project with no JavaScript build system in the middle.
 **Cost:** **the team has to be productive in Swift.** This is the biggest open risk in the technical plan.
-**Mitigation:** Sprint 0 includes a real test — build a working screen against the real database in the first two weeks. If it's painful, we switch back to React Native *before* any real code exists. See [TIMELINE.md](TIMELINE.md).
+**Mitigation:** Phase 0 includes a real test — build a working screen against the real database in the first two weeks. If it's painful, we switch back to React Native *before* any real code exists. See [TIMELINE.md](TIMELINE.md).
 **Also cost:** we lose over-the-air updates. See D10.
 
 ### D3 — No API server; the app talks to the database directly
@@ -311,28 +326,29 @@ We're not scheduling step 3. We're just making sure we haven't made it impossibl
 **Payoff:** a read-only CEO dashboard on the web would be roughly 6–8 weeks instead of a rebuild.
 
 ### D5 — Multi-company from day one
-**What:** every table carries `organization_id` from the very first migration, and isolation is enforced from Sprint 1.
+**What:** every table carries `organization_id` from the very first migration, and isolation is enforced from Phase 2, the moment real logins exist.
 **Why:** the CEO explicitly said to keep this general rather than GB-specific. Retrofitting this later is one of the most expensive changes in software — it touches every query, every rule, and every existing row. Adding a column and one uniform policy at the start costs about a day.
 **Cost:** slightly more ceremony in every query. Worth it even at 10% odds of a second customer.
 
 ### D6 — The CSV file drop is the main Dynamics plan, not the fallback
 **What:** build the nightly-file import first; treat direct database access as an optimization to add later.
 **Why:** direct integration has enormous variance — unknown version, network access, credentials, and a consultant who may not exist. A nightly export file works against every version of Dynamics ever made and requires no inbound connection to GB's production system.
-**Cost:** data is up to 24 hours old in Release 3. Fine — stock lookup and a catalog don't need to be real-time for GB's use.
+**Cost:** data is up to 24 hours old in Phase 3. Fine — stock lookup and a catalog don't need to be real-time for GB's use.
 
 ### D7 — Measure work finished, never bodily presence
 **What:** the app measures task completion, on-time rates, pre-trip compliance, pick accuracy, cycle time. It does **not** measure break length, idle time, indoor location, or message content. AI drafts task lists and flags operational oddities; it never scores or ranks people.
-**Why:** two reasons, either one sufficient on its own. **Legal:** California's duty-free break rules, protection of restroom frequency as a medical characteristic, two-party consent for recording communications, and new automated-decision-making rules landing inside our Release 6 window together turn presence-monitoring into a liability GB doesn't currently have. **Product:** output metrics answer the CEO's real question better — *"14 of 16 tasks done, 2 overdue"* is more useful to a supervisor than *"44 minutes in the bathroom,"* and it's a conversation they can have without a lawyer in the room.
-**Cost:** we are declining to build two features as literally described.
-**Status:** ⚠️ **The CEO should accept or reject this in writing before Sprint 0 ends.** Full reasoning: [WORKFORCE-POLICY.md](WORKFORCE-POLICY.md).
+**Why:** two reasons, either one sufficient on its own. **Legal:** California's duty-free break rules, protection of restroom frequency as a medical characteristic, two-party consent for recording communications, and new automated-decision-making rules landing inside our Phase 6 window together turn presence-monitoring into a liability GB doesn't currently have. **Product:** output metrics answer the CEO's real question better — *"14 of 16 tasks done, 2 overdue"* is more useful to a supervisor than *"44 minutes in the bathroom,"* and it's a conversation they can have without a lawyer in the room.
+**Also declined:** the newer brief asks for **computer vision in the warehouse to alert management when workers are slacking off**, reasoning that the surveillance objection is the company's problem rather than ours. It isn't. Under California law the party that builds a monitoring system is named alongside the party that runs it, and "they chose to switch it on" is not a defence that has ever worked. The request is on the record; the answer is no.
+**Cost:** we are declining to build three features as literally described.
+**Status:** ⚠️ **The CEO should accept or reject this in writing before Phase 0 ends.** Full reasoning: [WORKFORCE-POLICY.md](WORKFORCE-POLICY.md).
 
 ### D8 — Buy logins rather than build them
 **What:** Supabase Auth handles credentials, sessions, and password resets. Role and company travel in the login token.
-**Why:** doing authentication correctly is about 4 weeks of our 25-hour weeks — over 15% of the entire Release 1 budget — spent on a solved, commoditized problem where a mistake is catastrophic.
+**Why:** doing authentication correctly is about 4 weeks of our 25-hour weeks — over 15% of the entire MVP budget — spent on a solved, commoditized problem where a mistake is catastrophic.
 **Cost:** Supabase becomes a hard dependency. Softened by the fact that it's ordinary Postgres underneath, so the data stays portable.
 
 ### D9 — Ship a two-tab app, not a five-tab shell
-**What:** Release 1 shows warehouse employees My Day and Profile. Other tabs appear as they become real.
+**What:** Phase 1 shows warehouse employees My Day and Profile. Other tabs appear as they become real.
 **Why:** adoption is the top risk in the whole project. Three dead tabs on first launch teach the crew the app is unfinished and not worth opening, and first impressions with a warehouse workforce are hard to reverse.
 **Cost:** the app looks less ambitious in early demos. Worth it.
 
@@ -341,6 +357,18 @@ We're not scheduling step 3. We're just making sure we haven't made it impossibl
 **Why:** it's the price of D2.
 **Mitigation:** (a) the entire trial runs on **TestFlight**, where builds land in hours, not days; (b) a small settings table in Postgres lets us turn features on and off, adjust thresholds, and change text **without a new build at all**. Most "urgent fixes" during a trial are really "turn that off for now," and that becomes a database update.
 **Cost:** genuine, but bounded. Revisit only if it actually bites during the trial.
+
+### D11 — Three permission roles, with job as a tag *(new in v3)*
+**What:** `role` is one of `management`, `employee`, `customer`. The specific job — picker, stager, QC, driver, receiver, buyer, sales — is a **tag** on the person. Warehouse breadth is a separate `scope` field, which is how the CEO sees four sites and a manager sees one.
+**Why:** the CEO's brief groups his own people this way, and it happens to be the right technical shape too. Permissions are the part that must be exhaustively tested, and three roles is a matrix small enough to test exhaustively. Six roles — the previous plan — meant six times the policy surface to cover a difference that was mostly about *which screen to open*, not *what the database should permit*.
+**Cost:** a screen sometimes has to check a tag as well as a role, which is slightly more branching in the app. Cheap, and it happens where mistakes are visible rather than silent.
+**Escape hatch:** a tag becomes a real role the moment a phase needs it to carry different permissions. `driver` is the likely first, at the pre-trip checklist. Adding one is a migration and a policy, not a redesign.
+
+### D12 — Dynamics write-back is deferred, not refused *(new in v3)*
+**What:** data flows one way — out of Dynamics, into OpsLink. Inserting orders back into Dynamics is a candidate later stage, gated on a spike that runs no earlier than a full quarter after the read path is live.
+**Why:** the CEO asked for write-back and he is right about the destination — re-keying is a real cost. But nobody has yet established which Dynamics version this is, whether it exposes a supported write path or only raw SQL Server tables, whether a sandbox exists, or who administers the system. Committing to write into a financial record under those conditions is not ambition, it's a coin flip with twenty years of inventory and receivables.
+**Cost:** orders still get keyed in by hand until that spike clears. That is the single largest piece of manual work we are choosing not to fix yet, and it should be named as such rather than buried.
+**How it unblocks:** [§6.2, Rule 2](#62-three-rules) lists the four questions whose answers decide it.
 
 ---
 
@@ -370,15 +398,15 @@ At 25 hours a week we can't afford broad manual QA, so testing is concentrated w
 | **Staging** | Rehearsal, migration testing | Its own Supabase project | TestFlight, internal only |
 | **Production** | GB live | Its own Supabase project, with point-in-time recovery | App Store |
 
-**How we ship.** Short-lived branches merged into `main`. **Both engineers review every change** — that's the two-person-team insurance policy, not a formality. Database changes deploy to staging automatically; production is a deliberate manual step. App builds go to TestFlight **weekly starting in Sprint 3**, so App Store review is never a nasty surprise at the end.
+**How we ship.** Short-lived branches merged into `main`. **Both engineers review every change** — that's the two-person-team insurance policy, not a formality. Database changes deploy to staging automatically; production is a deliberate manual step. App builds go to TestFlight **weekly from November 2026**, so App Store review is never a nasty surprise at the end.
 
-**Backups.** Point-in-time recovery on production, **with one restore actually rehearsed during Sprint 5.** A backup nobody has ever restored is not a backup.
+**Backups.** Point-in-time recovery on production, **with one restore actually rehearsed during the hardening window (Jan 25 – Feb 5, 2027).** A backup nobody has ever restored is not a backup.
 
 ---
 
 ## 10. Appendix — Dynamics questionnaire
 
-*Hand this to whoever administers GB's Dynamics system. The answers decide whether Release 3 takes two weeks or three months. **Needed by 2026-11-06.***
+*Hand this to whoever administers GB's Dynamics system. The answers decide whether Phase 3 takes two weeks or three months. **Needed by 2026-11-06.***
 
 **Identifying the system**
 1. Exact product and version — from Help → About in the Dynamics window ("Dynamics GP 2013", "Dynamics NAV 2009 R2", "Dynamics SL 2011"…).
@@ -403,7 +431,7 @@ At 25 hours a week we can't afford broad manual QA, so testing is concentrated w
 14. Any contract or vendor restriction on third-party access?
 15. Is there a current support contract with the Dynamics vendor?
 
-> **The minimum useful answer:** if the only question GB can answer is **#7** — *yes, we can produce a nightly export file* — then Release 3 goes ahead on schedule. Everything else on this list is optimization.
+> **The minimum useful answer:** if the only question GB can answer is **#7** — *yes, we can produce a nightly export file* — then Phase 3 goes ahead on schedule. Everything else on this list is optimization.
 
 ---
 
