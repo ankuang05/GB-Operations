@@ -17,9 +17,9 @@ Goldberry Distributors is a food distributor, 20+ years old, four warehouses acr
 | **What they sell** | Meat · Seafood · Vegetables · Dry goods |
 | **Who they sell to** | Meat markets · Supermarkets · Other food distributors · Restaurants |
 | **How they get business** | Returning customers and word of mouth. No sales engine to speak of. |
-| **System of record** | Microsoft Dynamics, approximately the 2009 version |
+| **System of record** | Microsoft Dynamics — **"2009, or an older version — not sure"** (the brief's own words) |
 
-That last row matters more than it looks. A 2009-era Dynamics install has no modern way to be asked a question over the internet, and GB's twenty years of history all live inside it.
+That last row matters more than it looks, and the uncertainty in it is the point. A 2009-era Dynamics install has no modern way to be asked a question over the internet, GB's twenty years of history all live inside it, and **nobody has yet told us which version it actually is or who administers it.** Every estimate for Phase 3 carries that unknown — see [ENGINEERING.md §10](ENGINEERING.md#10-appendix--dynamics-questionnaire) for the questionnaire that closes it.
 
 **The CEO's priority is efficiency, not growth.** Nothing in the plan should read as a growth feature dressed up as an operations one.
 

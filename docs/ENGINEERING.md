@@ -195,18 +195,28 @@ create policy tenant_isolation on tasks
 Role rules stack on top. An employee, for instance, sees only tasks assigned to them or open to their site, while management sees the whole site (or the whole company, if organization-scoped):
 
 ```sql
-create policy warehouse_reads_own on tasks for select
+create policy tasks_readable on tasks for select
   using (
     organization_id = (auth.jwt() ->> 'organization_id')::uuid
     and (
-      (auth.jwt() ->> 'role') = 'management'
+      -- management: organization-scoped sees every site, site-scoped sees only its own
+      (
+        (auth.jwt() ->> 'role') = 'management'
+        and (
+          (auth.jwt() ->> 'scope') = 'organization'
+          or site_id = current_user_site()
+        )
+      )
+      -- employees: their own work, or work left open to their site
       or assigned_to_profile_id = auth.uid()
       or (assigned_to_profile_id is null and site_id = current_user_site())
     )
   );
 ```
 
-**The test we owe on this.** Success criterion 3 in [PRODUCT.md §4](PRODUCT.md#4-what-ships-when) is verified by an automated suite that runs on every single code change: it creates two fake companies, then asserts that for every table, under every role, looking across the boundary returns **zero rows**. It's written in Phase 2, *before* any feature that depends on it. A failure blocks the change from merging, no exceptions.
+**Note the `scope` check is load-bearing.** Without it, `role = 'management'` alone would let a single-warehouse manager read all four warehouses' tasks — the exact failure the scope field exists to prevent. Site scope is a boundary, not a display preference, so it belongs in the policy rather than in the app.
+
+**The test we owe on this.** Success criterion 3 in [PRODUCT.md §4](PRODUCT.md#4-what-ships-when) is verified by an automated suite that runs on every single code change: it creates two fake companies **each with two sites**, then asserts that for every table, under every role and scope, looking across either boundary returns **zero rows**. It's written in Phase 2, *before* any feature that depends on it. A failure blocks the change from merging, no exceptions.
 
 ### 4.3 Sensitive data
 

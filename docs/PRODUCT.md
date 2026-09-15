@@ -40,15 +40,17 @@ The CEO listed what's going wrong. We've sorted it into what software actually f
 
 ### 2.1 Things this app fixes
 
-| # | The problem | What it costs today | What we do about it |
-|---|---|---|---|
-| **P1** | Drivers skip pre-trip checks — tire pressure, fuel | Breakdowns, DOT violations, late deliveries | A checklist on the phone with photos, that must be finished before the shift starts |
-| **P2** | Pick tickets are typed out by hand | Hours of retyping, typos that become wrong deliveries | Tickets generated automatically and sent to the picker's phone |
-| **P3** | A person is paid to double-check every pick | One full salary spent on verification | The picker scans each item; the check happens as the work happens |
-| **P4** | Orders get re-keyed into the system by hand | Delays and transcription errors | Orders arrive in the system already typed |
-| **P5** | Order-takers get several calls at once, across four channels | **Lost orders**, customers on hold, burned-out staff | Regular customers reorder themselves, which takes the routine calls off the phone |
-| **P6** | Nobody can see whether the day's work is progressing | Managers and the CEO are guessing | Every assigned task is tracked — who, what, when, done or not |
-| **P7** | Proof of delivery is a paper signature carried back in a truck | Nothing is knowable until the driver returns | Delivery confirmation recorded on the phone at the door |
+| # | The problem | What it costs today | What we do about it | When |
+|---|---|---|---|---|
+| **P6** | Nobody can see whether the day's work is progressing | Managers and the CEO are guessing | Every assigned task is tracked — who, what, when, done or not | **P1** |
+| **P1** | Drivers skip pre-trip checks — tire pressure, fuel | Breakdowns, DOT violations, late deliveries | A checklist on the phone with photos, that must be finished before the shift starts | **P1** as a task with photo proof · **P6** as a checklist that blocks the shift |
+| **P5** | Order-takers get several calls at once, across four channels | **Lost orders**, customers on hold, burned-out staff | Regular customers reorder themselves, which takes the routine calls off the phone | **P5** |
+| **P4** | Orders get re-keyed into the system by hand | Delays and transcription errors | Orders arrive in OpsLink already typed. **Getting them into Dynamics still needs the write-back spike** ([D12](ENGINEERING.md#d12--dynamics-write-back-is-deferred-not-refused-new-in-v3)) | **P5** for OpsLink · Dynamics **unscheduled** |
+| **P2** | Pick tickets are typed out by hand | Hours of retyping, typos that become wrong deliveries | Tickets generated and sent to the picker's phone | ⚠️ **Unscheduled** — needs P3 |
+| **P3** | A person is paid to double-check every pick | One full salary spent on verification | The picker scans each item; the check happens as the work happens | ⚠️ **Unscheduled** — barcode scanning is out of scope |
+| **P7** | Proof of delivery is a paper signature carried back in a truck | Nothing is knowable until the driver returns | Delivery confirmation recorded on the phone at the door | ⚠️ **Unscheduled** |
+
+> **The bottom three rows are problems we have named but are not yet promising to fix.** They all sit behind Phase 3, and Phase 3 has no start date because nobody has confirmed the Dynamics connection is possible. Leaving them in the table without a date is deliberate — they are real costs GB is paying, and they should stay visible rather than quietly vanishing because they're inconvenient to schedule. **P3 in particular removes a salary**, so it is likely the first thing to schedule once Phase 3 lands.
 
 ### 2.2 Things this app deliberately does *not* fix
 

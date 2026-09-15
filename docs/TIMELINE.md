@@ -25,7 +25,21 @@ Every date below comes from one figure, and it should be visible to anyone readi
 
 That isn't pessimism, it's arithmetic. Planning against the real number is the difference between software GB is actually using in March and a demo that never lands.
 
-**MVP budget:** 22 working weeks × ~22 hrs = **~484 hours available**, against **473 hours** of planned work. An 11-hour buffer across six months is thin on purpose — see [§6, the cut list](#6-what-gets-cut-first).
+**MVP budget:**
+
+| | Hours |
+|---|---|
+| 22 working weeks × ~22 hrs | 484 |
+| Less the Thanksgiving week, realistically half a week | −11 |
+| **Actually available** | **473** |
+| **Planned work** (44 + 209 + 110 + 44 + 66) | **473** |
+| **Buffer** | **0** |
+
+**There is no buffer. Read that again, because it is the most important number on this page.**
+
+Every hour between now and the trial is already spoken for. That does not mean the plan is wrong — it means the plan has exactly one shock absorber, and it is **scope**, not time. The first thing that goes wrong comes straight out of [§6, the cut list](#6-what-gets-cut-first), immediately, without a meeting.
+
+If that is not acceptable, the honest fixes are to move the launch date or to add a third pair of hands. Pretending a buffer exists is not on the list.
 
 ---
 
